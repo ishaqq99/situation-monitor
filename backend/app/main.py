@@ -1,29 +1,32 @@
-from pathlib import Path
-import os
+from contextlib import asynccontextmanager
 
-import asyncpg
-import redis.asyncio as redis
-
-from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.kev import router as kev_router
+from app.storage.kev_cache import check_redis_connection
+from app.storage.postgres import (
+    check_database_connection,
+    initialize_database,
+)
 
-# Find the root of our project.
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
-# Load variables from the root .env file.
-load_dotenv(PROJECT_ROOT / ".env")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Run startup work before FastAPI begins serving requests.
+    """
 
+    await initialize_database()
 
-DATABASE_URL = os.getenv("DATABASE_URL")
-REDIS_URL = os.getenv("REDIS_URL")
+    yield
 
 
 app = FastAPI(
     title="Situation Monitor API",
     description="Backend API for the real-time situational awareness platform.",
     version="0.1.0",
+    lifespan=lifespan,
 )
 
 
@@ -39,8 +42,15 @@ app.add_middleware(
 )
 
 
+app.include_router(kev_router)
+
+
 @app.get("/")
 def root():
+    """
+    Simple application identity endpoint.
+    """
+
     return {
         "service": "Situation Monitor API",
         "version": "0.1.0",
@@ -49,40 +59,28 @@ def root():
 
 @app.get("/api/health")
 async def health_check():
-    database_status = "unhealthy"
-    redis_status = "unhealthy"
+    """
+    Check FastAPI, PostgreSQL, and Redis health.
+    """
 
-    # Test PostgreSQL.
-    try:
-        connection = await asyncpg.connect(DATABASE_URL)
-
-        await connection.execute("SELECT 1")
-
-        await connection.close()
-
-        database_status = "healthy"
-
-    except Exception:
-        database_status = "unhealthy"
-
-
-    # Test Redis.
-    try:
-        redis_client = redis.from_url(REDIS_URL)
-
-        await redis_client.ping()
-
-        await redis_client.aclose()
-
-        redis_status = "healthy"
-
-    except Exception:
-        redis_status = "unhealthy"
-
+    database_healthy = await check_database_connection()
+    redis_healthy = await check_redis_connection()
 
     return {
-        "status": "healthy",
+        "status": (
+            "healthy"
+            if database_healthy and redis_healthy
+            else "degraded"
+        ),
         "api": True,
-        "database": database_status,
-        "redis": redis_status,
+        "database": (
+            "healthy"
+            if database_healthy
+            else "unhealthy"
+        ),
+        "redis": (
+            "healthy"
+            if redis_healthy
+            else "unhealthy"
+        ),
     }
