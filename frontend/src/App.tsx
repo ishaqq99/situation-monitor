@@ -5,6 +5,7 @@ import "./App.css"
 import { requestJson } from "./api/http"
 import EpssStatusPanel from "./components/EpssStatusPanel"
 import KevPanel from "./components/KevPanel"
+import NvdStatusPanel from "./components/NvdStatusPanel"
 
 
 interface HealthStatus {
@@ -18,9 +19,11 @@ interface HealthStatus {
 function App() {
   const [health, setHealth] = useState<HealthStatus | null>(null)
   const [healthError, setHealthError] = useState<string | null>(null)
-  // A successful scheduled or manual EPSS refresh invalidates an open score
-  // card so users do not have to close/reopen a CVE to see the new value.
+
+  // Successful enrichment refreshes invalidate any open CVE detail card so the
+  // child EPSS/NVD components can read the newly stored values from PostgreSQL.
   const [epssRevision, setEpssRevision] = useState<string | null>(null)
+  const [nvdRevision, setNvdRevision] = useState<string | null>(null)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -86,7 +89,8 @@ function App() {
       </section>
 
       <EpssStatusPanel onRefreshed={setEpssRevision} />
-      <KevPanel epssRevision={epssRevision} />
+      <NvdStatusPanel onRefreshed={setNvdRevision} />
+      <KevPanel epssRevision={epssRevision} nvdRevision={nvdRevision} />
     </main>
   )
 }

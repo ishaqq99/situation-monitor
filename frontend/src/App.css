@@ -266,3 +266,14 @@ button:focus-visible, input:focus-visible { outline: 2px solid #93c5fd; outline-
   .kev-search input { flex-basis: 100%; }
   .kev-details-grid, .status-grid { grid-template-columns: 1fr; }
 }
+
+/* NVD CPE and reference values can be long machine-readable strings/URLs. */
+.kev-detail-section li,
+.kev-detail-section a {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.kev-detail-section ul {
+  padding-left: 22px;
+}
