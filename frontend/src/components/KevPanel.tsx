@@ -1,4 +1,4 @@
-// Complete KEV dashboard with locally stored EPSS shown in CVE details.
+// Complete KEV dashboard with locally stored EPSS and NVD enrichment in CVE details.
 
 import { useCallback, useEffect, useRef, useState } from "react"
 import type { FormEvent } from "react"
@@ -12,6 +12,7 @@ import {
 } from "../api/kev"
 import type { KEVEntry, KEVFeedStatus } from "../types/kev"
 import EpssScore from "./EpssScore"
+import NvdDetails from "./NvdDetails"
 
 
 type ViewMode = "latest" | "search"
@@ -20,7 +21,10 @@ const messageOf = (error: unknown) =>
   error instanceof Error ? error.message : "Request failed"
 
 
-function KevPanel({ epssRevision }: { epssRevision: string | null }) {
+function KevPanel({ epssRevision, nvdRevision }: {
+  epssRevision: string | null
+  nvdRevision: string | null
+}) {
   const [entries, setEntries] = useState<KEVEntry[]>([])
   const [feedStatus, setFeedStatus] = useState<KEVFeedStatus | null>(null)
   const [statusError, setStatusError] = useState<string | null>(null)
@@ -246,7 +250,7 @@ function KevPanel({ epssRevision }: { epssRevision: string | null }) {
       <div className="kev-header">
         <div>
           <h2>Known Exploited Vulnerabilities</h2>
-          <p>Latest CISA KEV intelligence enriched with FIRST EPSS</p>
+          <p>Latest CISA KEV intelligence enriched with FIRST EPSS and NVD</p>
         </div>
         <button onClick={handleRefresh} disabled={refreshDisabled}>
           {refreshDisabled ? "Refreshing..." : "Refresh KEV"}
@@ -371,8 +375,11 @@ function KevPanel({ epssRevision }: { epssRevision: string | null }) {
             </div>
           </div>
 
-          <EpssScore key={selectedKev.cve_id} cveId={selectedKev.cve_id}
+          <EpssScore key={`epss-${selectedKev.cve_id}`} cveId={selectedKev.cve_id}
             revision={epssRevision} />
+
+          <NvdDetails key={`nvd-${selectedKev.cve_id}`} cveId={selectedKev.cve_id}
+            revision={nvdRevision} />
 
           <div className="kev-detail-section">
             <strong>Description</strong>
