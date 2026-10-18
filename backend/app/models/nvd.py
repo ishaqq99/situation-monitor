@@ -34,7 +34,33 @@ lets normal CVE detail reads stay fast while still preserving analyst context.
 
 from datetime import datetime, timezone
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+
+def normalize_nvd_timestamp(value: datetime) -> datetime:
+    """Return one NVD timestamp as an offset-aware UTC datetime.
+
+    Why this function exists
+    ------------------------
+    NVD CVE API responses can contain date strings without a timezone suffix.
+    Pydantic parses those strings as offset-naive ``datetime`` objects, whereas
+    PostgreSQL TIMESTAMPTZ values returned by asyncpg are offset-aware. Python
+    cannot compare the two kinds directly.
+
+    Our NVD integration interprets an offset-less NVD date as UTC. A date that
+    already has an offset is converted to the equivalent UTC instant instead
+    of simply replacing its timezone. This function does no database I/O.
+
+    Called by
+    ---------
+    ``NVDCVE._timestamps_in_utc`` validates incoming and stored model values.
+    ``app.storage.nvd_repository.upsert_nvd_cve`` also uses it defensively when
+    comparing a row from a database created with an older timestamp schema.
+    """
+
+    if value.tzinfo is None or value.utcoffset() is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
 
 
 class NVDCVSSMetric(BaseModel):
@@ -106,6 +132,18 @@ class NVDCVE(BaseModel):
     fetched_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc)
     )
+
+    @field_validator("published_at", "last_modified_at", "fetched_at")
+    @classmethod
+    def _timestamps_in_utc(cls, value: datetime) -> datetime:
+        """Normalize all NVD lifecycle dates before service/storage use.
+
+        The collector constructs this model from NVD JSON. The repository also
+        constructs it when reading an asyncpg row. Keeping this rule in the
+        shared model prevents either path from creating a naive/aware pair.
+        """
+
+        return normalize_nvd_timestamp(value)
 
 
 class NVDCVSSChange(BaseModel):

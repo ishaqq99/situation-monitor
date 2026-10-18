@@ -1,3 +1,23 @@
+/**
+ * 
+ * FILE GUIDE
+ * ----------
+ * WHAT THIS FILE DOES
+ * Render the existing KEV list/search/detail interface and its enrichment panels.
+ * 
+ * WHY IT EXISTS
+ * Users start from KEV; OTX belongs beside EPSS and NVD in the selected CVE detail.
+ * 
+ * WHO CALLS OR IMPORTS IT
+ * App.tsx renders this component and passes EPSS/NVD revision signals.
+ * 
+ * WHAT IT CALLS OR IMPORTS
+ * Calls frontend/src/api/kev.ts and renders EpssScore, NvdDetails, and IocPanel.
+ * 
+ * ROLE IN THE ARCHITECTURE
+ * Main KEV feature UI; the OTX change is the new IocPanel in details.
+ * 
+ */
 // Complete KEV dashboard with locally stored EPSS and NVD enrichment in CVE details.
 
 import { useCallback, useEffect, useRef, useState } from "react"
@@ -13,14 +33,21 @@ import {
 import type { KEVEntry, KEVFeedStatus } from "../types/kev"
 import EpssScore from "./EpssScore"
 import NvdDetails from "./NvdDetails"
+import IocPanel from "./IocPanel"
 
 
 type ViewMode = "latest" | "search"
 
+/** Convert an unknown request failure into a safe string for the UI. */
 const messageOf = (error: unknown) =>
   error instanceof Error ? error.message : "Request failed"
 
 
+/**
+ * App.tsx renders this existing KEV feature view. It owns list/search/detail
+ * state and renders EPSS, NVD, and the new stored OTX panel for one selected
+ * CVE. The new IOC panel gets the CVE ID; it owns its own data polling.
+ */
 function KevPanel({ epssRevision, nvdRevision }: {
   epssRevision: string | null
   nvdRevision: string | null
@@ -47,6 +74,8 @@ function KevPanel({ epssRevision, nvdRevision }: {
   const detailActive = useRef(false)
   const selectedButton = useRef<HTMLButtonElement | null>(null)
 
+  // When the detail card appears, move focus and scroll to it so keyboard and
+  // screen-reader users reach the newly opened CVE content.
   useEffect(() => {
     if (!selectedKev) return
     // Wait for React's render before moving focus/scroll to the loaded card.
@@ -61,6 +90,7 @@ function KevPanel({ epssRevision, nvdRevision }: {
   const loading = operation === "latest"
   const searching = operation === "search"
 
+  /** Stop an obsolete detail request and clear the selected CVE card. */
   const closeDetails = useCallback(() => {
     detailRequest.current?.abort()
     detailRequest.current = null
@@ -69,6 +99,7 @@ function KevPanel({ epssRevision, nvdRevision }: {
     detailActive.current = false
   }, [])
 
+  /** Load either latest KEVs or search results, cancelling the previous list. */
   const loadList = useCallback(async (mode: ViewMode, query = "") => {
     listRequest.current?.abort()
     const controller = new AbortController()
@@ -97,10 +128,13 @@ function KevPanel({ epssRevision, nvdRevision }: {
     }
   }, [closeDetails])
 
+  // Fetch the initial latest-KEV list once. Cleanup aborts all outstanding
+  // list, detail, and refresh requests if App unmounts this component.
   useEffect(() => {
     const controller = new AbortController()
     listRequest.current = controller
 
+    /** Populate the first ten KEVs on page open; later reloads use loadList. */
     async function initialLoad() {
       try {
         const rows = await getLatestKev(10, controller.signal)
@@ -130,6 +164,7 @@ function KevPanel({ epssRevision, nvdRevision }: {
     let timer: ReturnType<typeof setTimeout> | undefined
     let previousTimestamp: string | null | undefined
 
+    /** Read KEV import status and refresh the list after a new completed feed. */
     async function pollStatus() {
       try {
         const status = await getKevStatus(controller.signal)
@@ -169,6 +204,7 @@ function KevPanel({ epssRevision, nvdRevision }: {
     }
   }, [loadList])
 
+  /** Trigger the existing KEV refresh action, then reload the latest list. */
   async function handleRefresh() {
     if (refreshRequest.current) return
 
@@ -203,6 +239,7 @@ function KevPanel({ epssRevision, nvdRevision }: {
     }
   }
 
+  /** Submit the search form while keeping network details in api/kev.ts. */
   async function handleSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const query = searchTerm.trim()
@@ -211,6 +248,7 @@ function KevPanel({ epssRevision, nvdRevision }: {
     await loadList("search", query)
   }
 
+  /** Clear a search and restore the latest-KEV view. */
   async function handleClearSearch() {
     if (refreshRequest.current) return
     setSearchTerm("")
@@ -218,6 +256,7 @@ function KevPanel({ epssRevision, nvdRevision }: {
     await loadList("latest")
   }
 
+  /** Fetch full KEV detail before mounting EPSS, NVD, and OTX subpanels. */
   async function handleSelectCve(cveId: string, button: HTMLButtonElement) {
     closeDetails()
     selectedButton.current = button
@@ -380,6 +419,10 @@ function KevPanel({ epssRevision, nvdRevision }: {
 
           <NvdDetails key={`nvd-${selectedKev.cve_id}`} cveId={selectedKev.cve_id}
             revision={nvdRevision} />
+
+          {/* Reads stored OTX evidence. Its own polling observes worker updates;
+              opening a CVE does not call the external provider. */}
+          <IocPanel key={`ioc-${selectedKev.cve_id}`} cveId={selectedKev.cve_id} />
 
           <div className="kev-detail-section">
             <strong>Description</strong>

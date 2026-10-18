@@ -12,9 +12,28 @@ NVD enrichment is intentionally KEV-centered. The worker processes a bounded
 batch of KEVs that are missing NVD data or whose stored NVD record has become
 stale. ``NVD_API_KEY`` is optional, but an API key allows a much faster initial
 backfill. Request pacing remains sequential even when a key is configured.
+
+
+FILE GUIDE
+----------
+WHAT THIS FILE DOES
+Read and validate environment settings for KEV, EPSS, NVD, and OTX.
+
+WHY IT EXISTS
+One settings module prevents collectors and workers from parsing the same values differently.
+
+WHO CALLS OR IMPORTS IT
+Backend routes, services, collectors, and workers import its constants.
+
+WHAT IT CALLS OR IMPORTS
+Reads process environment and the existing private root .env through dotenv.
+
+ROLE IN THE ARCHITECTURE
+Configuration boundary; it neither contacts providers nor stores data.
 """
 
 import os
+import math
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -25,7 +44,11 @@ load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
 
 def positive_int(name: str, default: int) -> int:
-    """Read a positive integer setting and fail early on invalid values."""
+    """Read a positive integer setting and fail early on invalid values.
+
+    Function detail: Called while this module loads. Returns a strictly positive integer or
+      raises ValueError before any worker starts.
+    """
     try:
         value = int(os.getenv(name, str(default)))
     except ValueError as exc:
@@ -36,13 +59,17 @@ def positive_int(name: str, default: int) -> int:
 
 
 def positive_float(name: str, default: float) -> float:
-    """Read a positive floating-point setting and fail early on invalid values."""
+    """Read a positive floating-point setting and fail early on invalid values.
+
+    Function detail: Called for pacing/deadline settings. Rejects zero, negative, and non-
+      finite values so retry calculations remain meaningful.
+    """
     try:
         value = float(os.getenv(name, str(default)))
     except ValueError as exc:
         raise ValueError(f"{name} must be a positive number") from exc
-    if value <= 0:
-        raise ValueError(f"{name} must be a positive number")
+    if not math.isfinite(value) or value <= 0:
+        raise ValueError(f"{name} must be a positive finite number")
     return value
 
 
@@ -116,3 +143,37 @@ CORS_ORIGINS = [
     ).split(",")
     if origin.strip()
 ]
+
+# IOC-CVE Stage 1 uses AlienVault OTX as the direct CVE -> pulse -> IOC source.
+# The API key is free but required for predictable authenticated access. OTX is
+# deliberately kept separate from future ThreatFox/GreyNoise configuration so
+# each source can have its own rate limits and trust policy.
+OTX_API_KEY = os.getenv("OTX_API_KEY", "").strip()
+OTX_SERVER = os.getenv("OTX_SERVER", "https://otx.alienvault.com").strip().rstrip("/")
+if not OTX_SERVER.startswith(("https://", "http://")):
+    raise ValueError("OTX_SERVER must start with http:// or https://")
+
+
+
+# OTX V1 SETTINGS
+# The optional feature is enabled explicitly after its files/schema are ready.
+# A missing key keeps its worker idle while existing KEV/EPSS/NVD continue.
+def environment_bool(name: str, default: bool = False) -> bool:
+    """Parse an explicit boolean instead of treating the string 'false' as true.
+
+    Function detail: Called when defining feature flags. Accepts explicit true/false
+      spellings; an invalid value fails startup instead of silently enabling OTX.
+    """
+    value = os.getenv(name, "true" if default else "false").strip().lower()
+    if value not in {"true", "false", "1", "0"}:
+        raise ValueError(f"{name} must be true or false")
+    return value in {"true", "1"}
+
+
+OTX_ENABLED = environment_bool("OTX_ENABLED")
+OTX_REFRESH_HOURS = positive_int("OTX_REFRESH_HOURS", 24)
+OTX_WORKER_POLL_SECONDS = positive_int("OTX_WORKER_POLL_SECONDS", 15)
+OTX_REQUEST_DELAY_SECONDS = positive_float("OTX_REQUEST_DELAY_SECONDS", 1.0)
+OTX_JOB_DELAY_SECONDS = positive_int("OTX_JOB_DELAY_SECONDS", 15)
+OTX_RETRY_SECONDS = positive_int("OTX_RETRY_SECONDS", 3_600)
+OTX_MANUAL_COOLDOWN_SECONDS = positive_int("OTX_MANUAL_COOLDOWN_SECONDS", 900)
