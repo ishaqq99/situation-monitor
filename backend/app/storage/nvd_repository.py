@@ -36,7 +36,12 @@ new row only when the selected CVSS assessment changes. Re-fetching an unchanged
 import json
 from datetime import datetime
 
-from app.models.nvd import NVDCVE, NVDCVSSChange, NVDCVSSMetric
+from app.models.nvd import (
+    NVDCVE,
+    NVDCVSSChange,
+    NVDCVSSMetric,
+    normalize_nvd_timestamp,
+)
 from app.storage.postgres import db_connection
 
 
@@ -301,9 +306,15 @@ async def upsert_nvd_cve(record: NVDCVE) -> NVDCVE:
             )
 
             # Never let an older provider revision replace a newer NVD state.
+            # TIMESTAMPTZ rows are aware, while NVD's offset-less date strings
+            # originally produced naive datetimes. The NVDCVE validator fixes
+            # new records; normalizing both sides also tolerates older rows or
+            # test fixtures without a timezone. No timestamps are rewritten
+            # merely to perform this comparison.
             if (
                 existing is not None
-                and existing["last_modified_at"] > record.last_modified_at
+                and normalize_nvd_timestamp(existing["last_modified_at"])
+                > normalize_nvd_timestamp(record.last_modified_at)
             ):
                 return _row_to_nvd_cve(existing)
 

@@ -1,0 +1,44 @@
+/*
+ * 
+ * FILE GUIDE
+ * ----------
+ * WHAT THIS FILE DOES
+ * Style only the OTX status and CVE-detail elements.
+ * 
+ * WHY IT EXISTS
+ * Long domains, URLs, and hashes need readable wrapping without altering other panels.
+ * 
+ * WHO CALLS OR IMPORTS IT
+ * IocPanel and IocStatusPanel import this stylesheet.
+ * 
+ * WHAT IT CALLS OR IMPORTS
+ * Applies class-based presentation; contains no data or network logic.
+ * 
+ * ROLE IN THE ARCHITECTURE
+ * OTX presentation layer alongside the existing application styles.
+ * 
+ */
+/* OTX-only presentation. Existing KEV/EPSS/NVD styles are preserved.
+   Long indicator values wrap as plain text and never become live links. */
+/* Separate the selected-CVE OTX evidence from its existing detail sections. */
+.ioc-panel { border-top: 1px solid #cbd5e1; margin-top: 1.5rem; padding-top: 1rem; }
+.ioc-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; justify-content: space-between; }
+.ioc-toolbar h3 { margin: .5rem 0; }
+/* Grid layout keeps status facts readable as the viewport narrows. */
+.ioc-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; }
+.ioc-facts dt { font-weight: 600; }
+.ioc-facts dd { margin: .35rem 0 0; overflow-wrap: anywhere; }
+.ioc-warning { border-left: 3px solid #c78217; padding-left: .75rem; }
+.ioc-muted { opacity: .8; }
+/* History is opt-in because an absent indicator must not look current. */
+.ioc-history-toggle { display: flex; align-items: flex-start; gap: .5rem; margin: 1rem 0; }
+.ioc-history-toggle input { width: auto; margin-top: .35rem; }
+.ioc-table { min-width: 800px; }
+.ioc-table td { vertical-align: top; }
+/* Display untrusted observables and references as wrapping text, never links. */
+.ioc-table pre { white-space: pre-wrap; overflow-wrap: anywhere; max-width: 28rem; font-size: .88rem; }
+.ioc-reference { overflow-wrap: anywhere; font-family: monospace; }
+/* Let readers expand provenance without flooding the main evidence table. */
+.ioc-assessment { padding: .75rem 0; border-bottom: 1px solid #cbd5e1; }
+.ioc-panel details { margin: .8rem 0; }
+.ioc-panel summary { cursor: pointer; font-weight: 600; }

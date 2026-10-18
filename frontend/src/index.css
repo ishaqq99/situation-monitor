@@ -1,14 +1,19 @@
+/* Global design tokens. App.css owns layouts and component class names. */
 :root {
-  font-family:
-    Inter,
-    system-ui,
-    sans-serif;
-
-  background: #0b1020;
-  color: #e7ecf5;
+  font-family: Inter, "Segoe UI", system-ui, sans-serif;
+  color: #e6e9e9;
+  background: #070a0d;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
 }
-
-
-* {
-  box-sizing: border-box;
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body { margin: 0; min-width: 320px; }
+button, input { font: inherit; }
+button { cursor: pointer; }
+a { color: inherit; }
+:focus-visible { outline: 2px solid #63ddba; outline-offset: 3px; }
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }

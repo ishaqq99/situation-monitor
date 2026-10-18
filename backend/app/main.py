@@ -20,6 +20,8 @@ FastAPI application (this file)
         |
         +--> NVD API router  --> NVD service / repository / cache
         |
+        +--> IOC API router  --> stored OTX evidence and refresh queue
+        |
         +--> PostgreSQL shared connection pool
         |
         +--> Redis shared client
@@ -29,6 +31,8 @@ FastAPI application (this file)
         +--> EPSS background worker
         |
         +--> NVD background worker
+        |
+        +--> IOC background worker
 
 Who imports/calls this file
 ---------------------------
@@ -46,9 +50,28 @@ What this file deliberately does NOT do
 - It does not contain PostgreSQL query logic.
 - It does not create Redis connections directly for every request.
 - It does not fetch NVD data itself; the NVD collector/service own that work.
+- It does not fetch OTX data itself; the IOC worker invokes the OTX collector.
 
 Those responsibilities stay in their own collectors, services, storage modules,
 and workers so this entry point remains small and predictable.
+
+
+FILE GUIDE
+----------
+WHAT THIS FILE DOES
+Create the FastAPI app and manage startup/shutdown of shared resources.
+
+WHY IT EXISTS
+One lifespan ensures database schema exists before any worker or request needs it.
+
+WHO CALLS OR IMPORTS IT
+Uvicorn imports app.main:app; FastAPI enters and exits lifespan.
+
+WHAT IT CALLS OR IMPORTS
+Registers all routes and starts KEV, EPSS, NVD, and IOC workers.
+
+ROLE IN THE ARCHITECTURE
+Backend composition root; business logic stays in services and storage.
 """
 
 import asyncio
@@ -60,6 +83,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.epss import router as epss_router
 from app.api.kev import router as kev_router
 from app.api.nvd import router as nvd_router
+from app.api.ioc import router as ioc_router
 from app.config import CORS_ORIGINS
 from app.storage.postgres import (
     check_database_connection,
@@ -71,6 +95,8 @@ from app.storage.redis import check_redis_connection, close_redis_client
 from app.workers.epss_worker import run_epss_worker
 from app.workers.kev_worker import run_kev_worker
 from app.workers.nvd_worker import run_nvd_worker
+from app.workers.ioc_worker import run_ioc_worker
+from app.storage.ioc_schema import initialize_ioc_schema
 
 
 @asynccontextmanager
@@ -93,10 +119,9 @@ async def lifespan(app: FastAPI):
     ---------------------------
     1. Create the shared PostgreSQL connection pool.
     2. Initialize database tables/indexes required by the existing application.
-    3. Start the KEV background worker.
-    4. Start the EPSS background worker.
-    5. Start the NVD background worker.
-    6. Yield control so FastAPI can begin serving requests.
+    3. Initialize the additive OTX schema using the same PostgreSQL pool.
+    4. Start the KEV, EPSS, NVD, and IOC background workers.
+    5. Yield control so FastAPI can begin serving requests.
 
     What happens during shutdown
     ----------------------------
@@ -132,6 +157,9 @@ async def lifespan(app: FastAPI):
         # Ensure the current KEV/EPSS/NVD database objects exist before workers or
         # API routes begin depending on them.
         await initialize_database()
+        # The IOC schema extends the existing database and shared pool. It does
+        # not recreate KEV/EPSS/NVD tables or restore any database backup.
+        await initialize_ioc_schema()
 
         # Start the existing background refresh loops. EPSS already contains
         # its own startup-delay behavior so KEV can populate a new database
@@ -140,6 +168,7 @@ async def lifespan(app: FastAPI):
             asyncio.create_task(run_kev_worker(stop_event), name="kev-worker"),
             asyncio.create_task(run_epss_worker(stop_event), name="epss-worker"),
             asyncio.create_task(run_nvd_worker(stop_event), name="nvd-worker"),
+            asyncio.create_task(run_ioc_worker(stop_event), name="ioc-worker"),
         ]
 
         # FastAPI serves requests while execution is paused here.
@@ -190,6 +219,7 @@ app.add_middleware(
 app.include_router(kev_router)
 app.include_router(epss_router)
 app.include_router(nvd_router)
+app.include_router(ioc_router)
 
 
 @app.get("/")
