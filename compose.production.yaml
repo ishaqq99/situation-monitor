@@ -1,0 +1,94 @@
+# Production stack for the current Situation Monitor ZIP.
+# Run this file by itself with --env-file .env.production. Do not combine it
+# with the local-development docker-compose.yml, which publishes DB ports.
+name: situation-monitor
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB in .env.production}
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER in .env.production}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env.production}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    # Deliberately no ports: PostgreSQL is reachable only by this stack.
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    # Redis has no password because it is confined to the Compose network.
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      # The password is URL-safe hex; the same value initializes PostgreSQL.
+      DATABASE_URL: postgresql://${POSTGRES_USER:?}:${POSTGRES_PASSWORD:?}@postgres:5432/${POSTGRES_DB:?}
+      REDIS_URL: redis://redis:6379/0
+      CORS_ORIGINS: https://monitor.haqsec.com
+      NVD_API_KEY: ${NVD_API_KEY:-}
+      OTX_API_KEY: ${OTX_API_KEY:-}
+      OTX_ENABLED: ${OTX_ENABLED:-false}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import json,urllib.request; assert json.load(urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=5))['status'] == 'healthy'"
+      interval: 15s
+      timeout: 8s
+      retries: 8
+      start_period: 120s
+    # Uvicorn listens inside the stack; the host has no published API port.
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_PUBLIC_DEMO: "true"
+        VITE_API_BASE_URL: ""
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    # Nginx serves React and proxies GET /api/* to the API container.
+    # Only cloudflared reaches this container; no host port is published.
+
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: ["tunnel", "--no-autoupdate", "run"]
+    environment:
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN:?Set the Cloudflare tunnel token in .env.production}
+    depends_on:
+      frontend:
+        condition: service_started
+    # In the Cloudflare dashboard, route monitor.haqsec.com to
+    # http://frontend:80 (the Docker service name, not localhost).
+
+volumes:
+  postgres_data:
+  redis_data:

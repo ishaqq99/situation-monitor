@@ -1,24 +1,32 @@
 # Python virtual environment
 backend/.venv/
 
-# Python cache
+# Python cache and local test results
 __pycache__/
 *.pyc
+.pytest_cache/
 
-# Environment secrets
+# Environment secrets. Keep example templates so teammates can see which
+# settings they need without receiving real passwords or API keys.
 .env
+.env.*
+!.env.example
+!.env.production.example
+!frontend/.env.example
 
-# Node dependencies
+# Node dependencies and compiled frontend
 frontend/node_modules/
-
-# Frontend build
 frontend/dist/
 
-# VS Code
+# Database backups and local transfer archives must not enter public Git.
+backend/postgres-backup.tar.gz
+*.zip
+
+# Private keys and certificates used for server access
+*.pem
+*.key
+
+# Editor and operating-system files
 .vscode/
-
-# Windows
 Thumbs.db
-
-# macOS
 .DS_Store

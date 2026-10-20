@@ -1,0 +1,14 @@
+# Only Python source and requirements are needed in the production build.
+.venv/
+venv/
+__pycache__/
+.pytest_cache/
+tests/
+check_*.py
+.env
+.env.*
+*.pyc
+*.pyd
+*.tar.gz
+*.zip
+*.log
