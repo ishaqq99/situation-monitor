@@ -110,9 +110,12 @@ function EpssStatusPanel({ onRefreshed }: {
         </div>
       </div>
 
-      <button className="primary-button" onClick={handleRefresh} disabled={refreshDisabled}>
-        {refreshDisabled ? "Refreshing EPSS..." : "Refresh EPSS"}
-      </button>
+      {/* Public deployments refresh in the background; local dev keeps this action. */}
+      {import.meta.env.VITE_PUBLIC_DEMO !== "true" && (
+        <button className="primary-button" onClick={handleRefresh} disabled={refreshDisabled}>
+          {refreshDisabled ? "Refreshing EPSS..." : "Refresh EPSS"}
+        </button>
+      )}
 
       {error && <p className="error-message" role="alert">{error}</p>}
       {statusError && <p className="status-warning" role="status">{statusError}</p>}

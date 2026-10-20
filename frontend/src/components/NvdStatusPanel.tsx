@@ -138,9 +138,12 @@ function NvdStatusPanel({ onRefreshed }: {
         </div>
       </div>
 
-      <button className="primary-button" onClick={handleRefresh} disabled={refreshDisabled}>
-        {refreshDisabled ? "Refreshing NVD..." : "Refresh NVD Batch"}
-      </button>
+      {/* The public site shows stored results; its worker owns refreshes. */}
+      {import.meta.env.VITE_PUBLIC_DEMO !== "true" && (
+        <button className="primary-button" onClick={handleRefresh} disabled={refreshDisabled}>
+          {refreshDisabled ? "Refreshing NVD..." : "Refresh NVD Batch"}
+        </button>
+      )}
 
       {error && <p className="error-message" role="alert">{error}</p>}
       {statusError && <p className="status-warning" role="status">{statusError}</p>}

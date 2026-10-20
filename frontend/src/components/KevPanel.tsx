@@ -291,9 +291,12 @@ function KevPanel({ epssRevision, nvdRevision }: {
           <h2>Known Exploited Vulnerabilities</h2>
           <p>Latest CISA KEV intelligence enriched with FIRST EPSS and NVD</p>
         </div>
-        <button onClick={handleRefresh} disabled={refreshDisabled}>
-          {refreshDisabled ? "Refreshing..." : "Refresh KEV"}
-        </button>
+        {/* Production is a public read-only demo; workers refresh automatically. */}
+        {import.meta.env.VITE_PUBLIC_DEMO !== "true" && (
+          <button onClick={handleRefresh} disabled={refreshDisabled}>
+            {refreshDisabled ? "Refreshing..." : "Refresh KEV"}
+          </button>
+        )}
       </div>
 
       <div className="kev-status">

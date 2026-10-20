@@ -120,9 +120,12 @@ export default function IocPanel({ cveId }: { cveId: string }) {
   return <section className="kev-detail-section ioc-panel" aria-label={`OTX evidence for ${cveId}`}>
     <div className="ioc-toolbar">
       <h3>AlienVault OTX — report context</h3>
-      <button type="button" disabled={queuing || page?.job?.state === "running"} onClick={() => { void requestRefresh() }}>
-        {queuing ? "Queuing..." : "Request OTX refresh"}
-      </button>
+      {/* The unauthenticated public view cannot queue provider work. */}
+      {import.meta.env.VITE_PUBLIC_DEMO !== "true" && (
+        <button type="button" disabled={queuing || page?.job?.state === "running"} onClick={() => { void requestRefresh() }}>
+          {queuing ? "Queuing..." : "Request OTX refresh"}
+        </button>
+      )}
     </div>
     <p>Indicators below share a related threat report with this CVE. They are not confirmed exploitation indicators for this CVE.</p>
     {notice && <p role="status">{notice}</p>}
