@@ -1,72 +1,50 @@
-/**
- * Dashboard composition root. main.tsx mounts this file.
+/** Public dashboard composition.
  *
- * App arranges existing KEV, EPSS, NVD, and OTX components around a real
- * globe. It reads only the existing /api/health route; individual panels own
- * their own requests. It never calls an external intelligence provider.
+ * main.tsx mounts App. App polls only the read-only threat overview; feature
+ * components read stored KEV, EPSS, NVD, and OTX evidence. Operational health,
+ * worker status, and manual refresh controls are intentionally not mounted.
  */
 import { useEffect, useState } from "react"
 
 import "./App.css"
-import { requestJson } from "./api/http"
-import EpssStatusPanel from "./components/EpssStatusPanel"
-import IocStatusPanel from "./components/IocStatusPanel"
+import { getThreatOverview } from "./api/threat"
 import KevPanel from "./components/KevPanel"
-import NvdStatusPanel from "./components/NvdStatusPanel"
 import RecentKevPanel from "./components/RecentKevPanel"
 import SecurityGlobe from "./components/SecurityGlobe"
+import ThreatOverviewPanel from "./components/ThreatOverviewPanel"
+import type { ThreatOverview } from "./types/threat"
 
-/** Shape returned by the existing FastAPI health endpoint. */
-interface HealthStatus {
-  status: string
-  api: boolean
-  database: string
-  redis: string
-}
-
-/** Assemble the SOC layout and keep platform health current. */
+/** Arrange the public page and share one threat snapshot with list and map. */
 function App() {
-  const [health, setHealth] = useState<HealthStatus | null>(null)
-  const [healthError, setHealthError] = useState(false)
-  const [epssRevision, setEpssRevision] = useState<string | null>(null)
-  const [nvdRevision, setNvdRevision] = useState<string | null>(null)
+  const [threats, setThreats] = useState<ThreatOverview | null>(null)
+  const [threatError, setThreatError] = useState(false)
+  const [threatLoading, setThreatLoading] = useState(true)
 
   useEffect(() => {
     const controller = new AbortController()
     let timer: ReturnType<typeof setTimeout> | undefined
 
-    /** Schedule the next health check only after this one finishes. */
-    async function checkBackend() {
+    /** Read cached threat data and retry five minutes after each completed read. */
+    async function loadThreats() {
       try {
-        const data = await requestJson<HealthStatus>("/api/health", {
-          signal: controller.signal,
-        })
+        const snapshot = await getThreatOverview(controller.signal)
         if (!controller.signal.aborted) {
-          setHealth(data)
-          setHealthError(false)
+          setThreats(snapshot)
+          setThreatError(false)
         }
       } catch {
-        if (!controller.signal.aborted) {
-          setHealth(null)
-          setHealthError(true)
-        }
+        if (!controller.signal.aborted) setThreatError(true)
       } finally {
         if (!controller.signal.aborted) {
-          timer = setTimeout(() => { void checkBackend() }, 15_000)
+          setThreatLoading(false)
+          timer = setTimeout(() => { void loadThreats() }, 300_000)
         }
       }
     }
 
-    void checkBackend()
-    return () => {
-      controller.abort()
-      clearTimeout(timer)
-    }
+    void loadThreats()
+    return () => { controller.abort(); clearTimeout(timer) }
   }, [])
-
-  // This indicator reports our API's reachability, not live provider activity.
-  const backendState = healthError ? "OFFLINE" : !health ? "CHECKING"
-    : health.api && health.status === "healthy" ? "CONNECTED" : "DEGRADED"
 
   return (
     <main className="dashboard">
@@ -76,46 +54,40 @@ function App() {
           <div>
             <p className="eyebrow">SECURITY OPERATIONS / OPEN-SOURCE INTELLIGENCE</p>
             <h1>Situation Monitor</h1>
-            <p className="page-subtitle">Vulnerability intelligence and source health in one view</p>
+            <p className="page-subtitle">Vulnerabilities and recent web threat activity in one view</p>
           </div>
         </div>
         <div className="header-actions">
-          <span className={`connection-state state-${backendState.toLowerCase()}`} role="status">
-            <span className="state-light" aria-hidden="true" />
-            API {backendState}
-          </span>
           <a className="header-link" href="#kev-explorer">OPEN CVE EXPLORER ↗</a>
         </div>
       </header>
 
-      <div className="source-tape" aria-label="Configured intelligence sources">
-        <span>CISA KEV</span><span>FIRST EPSS</span><span>NVD</span><span>ALIENVAULT OTX</span>
-        <span className="source-tape-note">Feed timestamps and status appear below</span>
+      <div className="source-tape" aria-label="Intelligence sources">
+        <span>CISA KEV</span><span>FIRST EPSS</span><span>NVD</span>
+        <span>ALIENVAULT OTX</span><span>CLOUDFLARE RADAR</span>
       </div>
 
       <div className="soc-layout">
-        <aside className="soc-rail" aria-label="Enrichment feed status">
-          <div className="rail-heading"><span>01 / ENRICHMENT</span><span>FEED STATUS</span></div>
-          <EpssStatusPanel onRefreshed={setEpssRevision} />
-          <NvdStatusPanel onRefreshed={setNvdRevision} />
+        <aside className="soc-rail" aria-label="Recent web threat activity">
+          <div className="rail-heading"><span>01 / THREAT ACTIVITY</span><span>24H VIEW</span></div>
+          <ThreatOverviewPanel overview={threats} loading={threatLoading} error={threatError} />
         </aside>
 
         <section className="globe-column" aria-label="Global view">
           <div className="globe-heading">
-            <div><p className="eyebrow">GLOBAL VIEW / GEOSPATIAL LAYER</p><h2>World overview</h2></div>
-            <span className="globe-phase">MAP READY · THREAT LAYER NEXT</span>
+            <div><p className="eyebrow">GLOBAL VIEW / COUNTRY SUMMARY</p><h2>World overview</h2></div>
+            <span className="globe-phase">RECENT WEB THREATS</span>
           </div>
-          <SecurityGlobe />
+          <SecurityGlobe overview={threats} />
           <div className="globe-footer">
             <span>Drag to explore · map data © OpenStreetMap contributors</span>
-            <span>Threat locations appear only when a source supplies defensible coordinates.</span>
+            <span>Markers represent source IP countries; points are illustrative country positions.</span>
           </div>
         </section>
 
         <aside className="soc-rail" aria-label="Current vulnerability intelligence">
-          <div className="rail-heading"><span>02 / INTELLIGENCE</span><span>KEV + OTX</span></div>
+          <div className="rail-heading"><span>02 / VULNERABILITIES</span><span>CISA KEV</span></div>
           <RecentKevPanel />
-          <IocStatusPanel />
         </aside>
       </div>
 
@@ -125,12 +97,12 @@ function App() {
           <h2>Explore vulnerabilities</h2>
           <p>Search a CVE to inspect its KEV record, EPSS score, NVD context, and OTX observations.</p>
         </div>
-        <KevPanel epssRevision={epssRevision} nvdRevision={nvdRevision} />
+        <KevPanel />
       </section>
 
       <footer className="dashboard-footer">
-        <span>SITUATION MONITOR / SECURITY-FIRST BUILD</span>
-        <span>API {backendState} · POSTGRESQL {health?.database ?? "UNKNOWN"} · REDIS {health?.redis ?? "UNKNOWN"}</span>
+        <span>SITUATION MONITOR</span>
+        <span>Threat summary: <a href="https://radar.cloudflare.com/security-and-attacks">Cloudflare Radar</a> · CC BY-NC 4.0</span>
       </footer>
     </main>
   )

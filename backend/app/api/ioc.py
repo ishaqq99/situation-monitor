@@ -61,6 +61,33 @@ async def status():
         raise as_http_error(exc) from exc
 
 
+@router.get("/public/{cve_id}")
+async def public_details(cve_id: str, limit: int = Query(25, ge=1, le=100),
+                         offset: int = Query(0, ge=0, le=1_000_000),
+                         include_history: bool = False):
+    """Return evidence without queue, job, or provider-configuration fields.
+
+    Public Nginx permits this read route but blocks the operator IOC routes.
+    It uses the same stored-data service, then narrows the result before HTTP.
+    """
+    try:
+        page = await get_stored_iocs(cve_id, limit, offset, include_history)
+        return {
+            "cve_id": page.cve_id,
+            "total": page.total,
+            "limit": page.limit,
+            "offset": page.offset,
+            "include_history": page.include_history,
+            "observations": page.observations,
+            # Keep the existing frontend contract, with no operational content.
+            "job": None,
+            "assessments": [],
+            "assessment_total": 0,
+        }
+    except Exception as exc:
+        raise as_http_error(exc) from exc
+
+
 @router.get("/{cve_id}", response_model=IOCPage)
 async def details(cve_id: str, limit: int = Query(25, ge=1, le=100),
                   offset: int = Query(0, ge=0, le=1_000_000), include_history: bool = False):
