@@ -46,6 +46,8 @@ services:
       NVD_API_KEY: ${NVD_API_KEY:-}
       OTX_API_KEY: ${OTX_API_KEY:-}
       OTX_ENABLED: ${OTX_ENABLED:-false}
+      # Read-only Radar token. Keep it in the VPS .env.production file.
+      RADAR_API_TOKEN: ${RADAR_API_TOKEN:-}
     depends_on:
       postgres:
         condition: service_healthy

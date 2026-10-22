@@ -45,6 +45,14 @@ export function getIocPage(cveId: string, offset: number, includeHistory: boolea
   return requestJson(`/api/ioc/${encodeURIComponent(cveId)}?${query}`, { signal })
 }
 
+/** Public evidence endpoint omits job, queue, and report-decision details. */
+export function getPublicIocPage(cveId: string, offset: number, includeHistory: boolean,
+                                 signal?: AbortSignal): Promise<IOCPage> {
+  const query = new URLSearchParams({ limit: "25", offset: String(offset),
+    include_history: String(includeHistory) })
+  return requestJson(`/api/ioc/public/${encodeURIComponent(cveId)}?${query}`, { signal })
+}
+
 /**
  * Called by IocPanel beside the evidence page. Return five recent attempts so
  * a failed or partial run cannot be mistaken for a successful empty response.

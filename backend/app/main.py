@@ -84,6 +84,7 @@ from app.api.epss import router as epss_router
 from app.api.kev import router as kev_router
 from app.api.nvd import router as nvd_router
 from app.api.ioc import router as ioc_router
+from app.api.threat import router as threat_router
 from app.config import CORS_ORIGINS
 from app.storage.postgres import (
     check_database_connection,
@@ -220,6 +221,7 @@ app.include_router(kev_router)
 app.include_router(epss_router)
 app.include_router(nvd_router)
 app.include_router(ioc_router)
+app.include_router(threat_router)
 
 
 @app.get("/")
